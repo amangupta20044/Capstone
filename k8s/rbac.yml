@@ -1,0 +1,31 @@
+apiVersion: v1
+# create ServiceAccount for the resource manager just like jon description 
+#..jiske pas ye hoga wo decision le sakta hai ki konsa user konsa resource access kar sakta hai
+kind: ServiceAccount 
+metadata:
+  name:  resource-manager
+  # eska access hamne sandbox-deployment me diya hai
+  # jiske through ham apne pod aur service ko manage karenge aur sandbox ko permissin denge ki services aur pods create kar sake
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: resource-manager
+rules:
+- apiGroups: [""]
+  resources: ["pods", "services"]
+  verbs: ["get", "list", "watch", "create", "delete"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: resource-manager-binding
+subjects:
+- kind: ServiceAccount
+  name: resource-manager
+roleRef:
+  kind: Role
+  name: resource-manager
+  apiGroup: rbac.authorization.k8s.io

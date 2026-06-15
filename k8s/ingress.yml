@@ -1,0 +1,27 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: codespace-ingress
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /api/sand-box
+            pathType: Prefix
+            backend:
+              service:
+                name: sandbox-service
+                port:
+                  number: 80
+
+    - host: "*.preview.localhost"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: router-service
+                port:
+                  number: 80
