@@ -15,6 +15,7 @@ app.get('/api/status/readyz', (req, res) => {// server ready hai ya nahi ye chec
 });
 
 const proxies = {};
+const agentProxies = {};
 
 function getProxy(sandboxId) {
     const target = `http://sandbox-service-${sandboxId}`// constructed target URL based on the sandbox ID
@@ -30,11 +31,34 @@ function getProxy(sandboxId) {
 return proxies[sandboxId];
 }
 
+function getAgentProxy(sandboxId) {
+    const target = `http://sandbox-service-${sandboxId}:3000`// constructed target URL based on the sandbox ID
+
+    if(!agentProxies[sandboxId]) {
+        agentProxies[sandboxId] = createProxyMiddleware({
+            target,
+            changeOrigin: true,
+            ws: true,
+
+})
+    }
+return agentProxies[sandboxId];
+}
+
 
 app.use((req, res, next) => {
     const host = req.headers.host;
     const sandboxId = host.split('.')[0];// extract the sandbox ID from the host header
 
+    // pod1.preview.localhost
+    //pod1.agent.localhost
+
+    if(host.split('.')[1] === 'agent') {
+        return getAgentProxy(sandboxId)(req, res, next);
+    }  
+    else if(host.split('.')[1] === 'preview') {
+        return getProxy(sandboxId)(req, res, next);
+    }
 
     return getProxy(sandboxId)(req, res, next);
  });
