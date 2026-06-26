@@ -1,22 +1,75 @@
-import express from "express";
-import morgan from "morgan";
-import fs from "fs";
-import path from "path";
+import express from 'express';
+import morgan from 'morgan';
+import fs from 'fs';
+import path from 'path';
+import { Server } from "socket.io";
+import http from 'http';
+import pty from 'node-pty';
+import os from 'os';
+import cors from 'cors';
 
-const WORKING_DIR = '/workspace'
+
+const WORKING_DIR = '/workspace';
 
 const app = express();
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
+const httpServer = http.createServer(app);
 
 app.use(morgan('dev'));
+app.use(cors({
+    methods: [ "GET", "POST", "PATCH", "DELETE" ],
+    origin: "*",
+}));
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+const io = new Server(httpServer, {
+    cors: {
+        origin: "*",
+        methods: [ "GET", "POST", "PATCH" ],
+    }
+});
+
 
 app.get('/', (req, res) => {
     res.status(200).json({
-        message: "Hello, World!",
-        status: "success"
+        message: 'Hello from sandbox agent!',
+        status: 'success',
     });
 });
+
+
+
+const shell = process.env.SHELL || 'bash';
+
+// Spawn the PTY process
+const ptyProcess = pty.spawn(shell, [], {
+    name: 'xterm-color',
+    cols: 80,
+    rows: 30,
+    cwd: "/workspace",
+    env: process.env
+});
+
+ptyProcess.onData((data) => {
+    io.emit('terminal-output', data);
+});
+
+ptyProcess.onExit(({ exitCode, signal }) => {
+    console.log(`PTY process exited with code: ${exitCode}, signal: ${signal}`);
+});
+
+io.on("connection", (socket) => {
+    console.log("Client connected: " + socket.id);
+
+    socket.on("terminal-input", (data) => {
+        ptyProcess.write(data);
+    });
+
+    socket.on("disconnect", () => {
+        console.log("Client disconnected: " + socket.id);
+    });
+})
 
 /**
  * @route GET /list-files
@@ -40,7 +93,7 @@ app.get("/list-files", async (req, res) => {
             const relativePath = path.relative(baseDir, fullPath);
 
             // Exclude certain directories
-            if (entry.isDirectory() && ['node_modules', '.git', 'dist'].includes(entry.name)) {
+            if (entry.isDirectory() && [ 'node_modules', '.git', 'dist' ].includes(entry.name)) {
                 continue;
             }
 
@@ -69,40 +122,46 @@ app.get("/list-files", async (req, res) => {
 
 })
 
-/* 
-@route GET /read-file
-   @description : read the content of file specified in the query parameter 'files' . the query parameter should contain a comma-separated list of file names (relative to the working directory) to read. 
-   The response will be a JSON object with the file paths as keys and their contents as values.
-   eg: /read-file?files=file1.txt,file2.txt
- */
 
-app.get('/read-file', async (req, res) => {
+/**
+ * @route GET /read-files
+ * @description Reads the content of all files requested in the query parameter 'files' and returns their content as a JSON object.
+ * - eg. /read-files?files=file1.txt,/src/file2.txt
+ */
+app.get("/read-files", async (req, res) => {
+
     const files = req.query.files;
 
     if (!files) {
         return res.status(400).json({
-            message: "No files specified in query parameters",
-            status: "error"
+            message: 'No files specified in query parameter',
+            status: 'error',
         });
     }
+
     const fileList = files.split(',');
 
     const results = await Promise.all(fileList.map(async (file) => {
         const filePath = path.join(WORKING_DIR, file);
-
         try {
-            const contents = await fs.promises.readFile(filePath, 'utf-8');
+            const content = await fs.promises.readFile(filePath, 'utf-8');
             return {
-                [filePath.replace(WORKING_DIR, '')]: contents,
+                [ filePath.replace(WORKING_DIR, '') ]: content,
             }
         } catch (err) {
             return {
-                [filePath.replace(WORKING_DIR, '')]: `Error reading file: ${err.message}`,
+                [ filePath.replace(WORKING_DIR, '') ]: `Error reading file: ${err.message}`,
             }
         }
-
     }));
+
+    res.status(200).json({
+        message: 'File contents',
+        files: results,
+    });
+
 })
+
 
 /**
  * @route PATCH /update-files
@@ -129,11 +188,11 @@ app.patch("/update-files", async (req, res) => {
             await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
             await fs.promises.writeFile(filePath, content, 'utf-8');
             return {
-                [filePath]: 'File updated successfully',
+                [ filePath ]: 'File updated successfully',
             }
         } catch (err) {
             return {
-                [filePath]: `Error updating file: ${err.message}`,
+                [ filePath ]: `Error updating file: ${err.message}`,
             }
         }
     }));
@@ -167,11 +226,11 @@ app.post("/create-files", async (req, res) => {
             await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
             await fs.promises.writeFile(filePath, content, 'utf-8');
             return {
-                [filePath]: 'File created successfully',
+                [ filePath ]: 'File created successfully',
             }
         } catch (err) {
             return {
-                [filePath]: `Error creating file: ${err.message}`,
+                [ filePath ]: `Error creating file: ${err.message}`,
             }
         }
     }));
@@ -182,4 +241,5 @@ app.post("/create-files", async (req, res) => {
     });
 })
 
-export default app;
+
+export default httpServer;

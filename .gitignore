@@ -1,0 +1,43 @@
+# Dependency directories
+node_modules/
+node_modules
+
+k8s/secrets.yml
+
+# Environment files
+.env
+.env.*
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# Build output
+dist/
+build/
+
+# Vite cache
+.vite/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+*.swp
+*.swo
+*~
+
+# Docker
+docker-compose.override.yml
+
+# Kubernetes / local Dev files
+.kube/
+
+# Optional temp files
+tmp/
+temp/
